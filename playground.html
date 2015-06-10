@@ -185,7 +185,8 @@ function onProgress(event) {
 
     // Update progress indicator on progress
     if (event.type == "progress") {
-        console.log("progres " + event.loaded  + " " + event.total)
+        if (debug)
+            console.log("progres " + event.loaded  + " " + event.total)
         var progress = 100 * event.loaded / event.total;
         var progressString = progress.toPrecision(2)
         if (progress == 100)
