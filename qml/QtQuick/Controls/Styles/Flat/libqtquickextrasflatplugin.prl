@@ -1,0 +1,6 @@
+QMAKE_PRL_BUILD_DIR = /Users/msorvig/code/qt5-nacl-dev-build/pnacl-release/qtquickcontrols/src/extras/Styles/Flat
+QMAKE_PRO_INPUT = Flat.pro
+QMAKE_PRL_TARGET = libqtquickextrasflatplugin.a
+QMAKE_PRL_CONFIG = lex yacc depend_includepath testcase_targets import_plugins import_qpa_plugin qt warn_on release link_prl pepper nacl-newlib pnacl cross_compile static qpa no_mocdepend release qt_no_framework nacl unix posix gcc cross_compile compile_examples qpa largefile precompile_header use_gold_linker pcre qt_clear_installs force_bootstrap create_prl link_prl prepare_docs qt_docs_targets no_private_qt_headers_warning QTDIR_build exceptions_off testcase_exceptions warning_clean no_cxx_module plugin relative_qt_rpath git_build hide_symbols have_target staticlib thread opengl moc resources dll
+QMAKE_PRL_VERSION = 1.0.0
+QMAKE_PRL_LIBS = -L/Users/msorvig/dev/nacl_sdk/pepper_44/lib/pnacl/Release -L/Users/msorvig/code/qt5-nacl-dev-build/pnacl-release/qtbase/lib -lQt5Quick -lQt5Gui -lqtharfbuzzng -lqtfreetype -lQt5Qml -lQt5Network -lQt5Core -lppapi -lppapi_cpp -lqtpcre -lm -lppapi_gles2
