@@ -1,0 +1,6 @@
+To run this example:
+
+- if using  pnacl, edit playground html, change "application/x-nacl" to "application/x-pnacl"
+- if using shadow builds, make sure examples/ is present.
+- open playground.html in the browser.
+

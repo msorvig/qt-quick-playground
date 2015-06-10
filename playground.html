@@ -1,0 +1,417 @@
+<!--
+    The Qt Quick Playground.
+
+    This html file implements the Qt Quick playground. The central parts
+    of the playground are the code editor ("qml-input"), and the Qt Quick
+    display ("qml-output") (implemented as a native client plugin).
+
+    In addition to this comes example selection logic, native client loading
+    logic, and QML error handling. The main entry point is the "init()" function.
+
+    Dependencies:
+        qtloader.js
+        playground.nmf
+        playground.pexe / nexe
+        examples/*
+
+https://gist.github.com/anonymous/bdf6f39ae6dab5aecd74
+-->
+
+<html>
+
+<head>
+    <title>Qt Quick Playground</title>
+    <script src="qtloader.js" type="text/javascript"></script>
+</head>
+
+<style>
+
+body, html {
+    overflow: hidden;
+    margin : 0;
+}
+
+a:link {
+    text-decoration: none;
+}
+
+#TOPLEVEL {  display: flex; flex-direction: column; }
+#HEADER { flex: 0; flex-basis: 50px; display: flex; justify-content: center; align-items: center; }
+#TOOLBAR { flex: 0; flex-basis: 25px; display: flex;  align-items: center; padding: 5; padding-left : 10; }
+#A { flex: 10; display: flex; flex-direction: row; }
+#B { flex: 1; flex-basis: 50px; display: flex; flex-direction: row; }
+.flex-child { flex: 1; margin: 5; display: flex; }
+.qt-nacl-container{ flex: 1; display: flex; }
+.qt-nacl-embed{ flex: 1; }
+
+#HEADER { background-color : steelblue }
+#TITLETEXT { color: white; font-family: arial; font-weight: 100; font-size: 200%; letter-spacing: 2px;}
+
+</style>
+
+<script type="text/javascript">
+
+// Globals
+
+var debug = false;
+var qt = undefined;
+
+// Utility
+
+function $(elementId) {
+    return document.getElementById(elementId)
+}
+
+// Split  Url query parameters ("?Foo=bar&Bar=baz")
+// into key-value pars.
+function decodeQuery(query) {
+    if (query === undefined)
+        return {}
+    var vars = query.split('&');
+    var keyValues = {}
+    for (var i = 0; i < vars.length; i++) {
+        // split key/value on the first '='
+        var parts = vars[i].split(/=(.+)/);
+        var key = decodeURIComponent(parts[0]);
+        var value = decodeURIComponent(parts[1]);
+        if (key && key.length > 0)
+            keyValues[key] = value;
+    }
+    return keyValues;
+}
+
+// asyc http request
+function rest(method, url, onComplete, contents) {
+    var xhr = new XMLHttpRequest()
+    xhr.open(method, url, true)
+    xhr.responseType = "text"
+
+    xhr.onload = function(e) {
+        if (this.status == 200) {
+            var source = this.response
+            onComplete(url, source)
+        } else {
+              console.log("rest error on " + url)
+        }
+    }
+    xhr.send(contents)
+}
+
+function get(url, onComplete) {
+    rest("GET", url, onComplete, null)
+}
+
+function post(url, contents, onComplete) {
+    rest("POST", url, onComplete, contents)
+}
+
+// HTML local storage save support
+
+function localStorageKey(name) {
+    return "qmlsource-" + name
+}
+
+function localSaveSource(name, source) {
+    localStorage.setItem(localStorageKey(name), source)
+}
+
+function localLoadSource(name) {
+    return localStorage.getItem(localStorageKey(name))
+}
+function localHasSource(name) {
+    return localLoadSource(name) !== null
+}
+
+function localDeleteSource(name) {
+    localStorage.removeItem(localStorageKey(name))
+}
+
+function localListSources() {
+    var sourcePrefix = "qmlsource-"
+    var sourceList = []
+    for (key in localStorage)
+        if (key.indexOf(sourcePrefix) == 0)
+            sourceList.push(key.slice(sourcePrefix.length));
+    return sourceList
+}
+
+// Gist support
+
+function jsonPHandler(content) {
+    return content;
+}
+
+// make "create gist" request to github
+function createGist(name, source, callback) {
+    var files = {}
+    files[name] = {"content" : source}
+    var request = {
+      "description": "Qt Quick Playground Gist",
+      "public": true,
+      "files": files
+    }
+    var requestString = JSON.stringify(request)
+    var url = "https://api.github.com/gists?callback=jsonPHandler"
+    var evalJsonP = function(url, content) {
+        var response = eval(content)
+        callback(response.data)
+    }
+
+    post(url, requestString, evalJsonP)
+}
+
+// make "get gist" request to github.
+function loadGist(id, callback) {
+    var baseUrl = "https://api.github.com/gists/"
+    var gistUrl = baseUrl + id + "?callback=jsonPHandler"
+    var evalJsonP = function(url, content) {
+        var response = eval(content)
+        callback(response.data)
+    }
+
+    get(gistUrl, evalJsonP)
+}
+
+// Action callbacks and response logic
+
+function onProgress(event) {
+    if (debug)
+        console.log(event.type)
+
+    // Show progress indicator on load start
+    if (event.type == "loadstart") {
+       $("loading").style.display = "block"
+    }
+
+    // Update progress indicator on progress
+    if (event.type == "progress") {
+        console.log("progres " + event.loaded  + " " + event.total)
+        var progress = 100 * event.loaded / event.total;
+        var progressString = progress.toPrecision(2)
+        if (progress == 100)
+            progressString = 100;
+
+        if (event.total == 0)
+            $("loading").innerHTML = "Loading Qt Quick..."
+        else
+            $("loading").innerHTML = "Loading Qt Quick: " +  progressString + " %.";
+    }
+
+    // Re-trigger QML loading logic when Qt is ready
+    if (event.type == "load") {
+        console.log("onload")
+        onRunSource()
+    }
+
+    // Hide progress indicator on load end
+    if (event.type == "loadend") {
+        console.log("loadend")
+        $("loading").style.display = "none";
+    }
+}
+
+function onMessage(message) {
+    // Present QML errors to the user
+    var qmlStatusKey = "qmlstatus:"
+    if (message.data.indexOf(qmlStatusKey) === 0) {
+        var content = message.data.slice(qmlStatusKey.length);
+        $("qml-status").value = "Parse Status " + content;
+    }
+
+    var qmlWarningsKey = "qmlwarnings:"
+    if (message.data.indexOf(qmlWarningsKey) === 0) {
+        var content = message.data.slice(qmlWarningsKey.length);
+        $("qml-warnings").value += content; // append warnings
+    }
+}
+
+function onCrash(event) {
+    // Oops. inform the user and restart Qt.
+    $("qml-status").value = "Qt crashed: restarting";
+    var output = $("qml-output");
+    while (output.firstChild) {
+        output.removeChild(output.firstChild);
+    }
+    init();
+}
+
+function setSource(name, source) {
+    $("qml-input").value = source
+    $("name-label").value = name
+
+    // run code on source update
+    onRunSource();
+}
+
+function onExampleSelect(name){
+    $("gist-label").innerHTML=""
+    // The example has changes, update source and Qt Quick display
+    var fileName = name + ".qml"
+    var url = "examples/" + fileName
+    if (localHasSource(fileName)) {
+        setSource(fileName, localLoadSource(fileName))
+    } else {
+        var setNamedSource = function (url, content) {
+            setSource(fileName, content)
+        }
+        get(url, setNamedSource)
+    }
+}
+
+function onSaveSource() {
+    // Save the current example source to local storage
+    var name = $("name-label").value
+    var source = $("qml-input").value
+    localSaveSource(name, source)
+}
+
+function onResetSource() {
+    // Reset the source back to the example default, discarding local changes
+    var name = $("name-label").value
+    localDeleteSource(name)
+    // trigger reload
+    $("example-select").onchange();
+}
+
+function onChangeSource() {
+    // Tell Qt to update the source QML iff autorun is enabled
+    var autorun = $("autorun").checked
+    if (autorun)
+        onRunSource()
+}
+
+function onRunSource() {
+    // Clear warnings
+    $("qml-warnings").value = ""
+
+    // Tell Qt to update the source QML
+    var source = $("qml-input").value
+    if (source === undefined || source == "")
+        return
+
+    console.log("postmessage qmlsource")
+    qt.postMessage("qmlsource:" + source)
+}
+
+function onCreateGist() {
+    var name = $("example-select").value
+    var source = $("qml-input").value
+    $("gist-label").innerHTML = "Working..."
+    createGist(name + ".qml", source, onGistCreated)
+}
+
+function onGistCreated(data) {
+    var baseUrl = window.location.protocol + "//" + window.location.hostname + ":" + 
+                  window.location.port + window.location.pathname
+    var id = data.id
+    var playgroundUrl = baseUrl + "?gist=" + id
+    var githubUrl = data.html_url
+
+    var label = $("gist-label");
+    label.innerHTML = "<a target=_blank href=" + githubUrl + "> gist </a>" + 
+                      "&nbsp;<a target=_blank href=" + playgroundUrl + "> playground </a>"
+}
+
+function onGistLoaded(data) {
+    var files = Object.keys(data.files)
+    var firstFile = files[0] // we support one file
+    var source = data.files[firstFile].content
+    setSource(firstFile, source)
+    onGistCreated(data) // re-use to set gist label
+}
+
+// Main entry point
+
+function init() {
+    if (debug)
+        console.log("init")
+
+    // Add Qt load progress indicator. Will be made visible
+    // by the progress handler.
+    var loading = document.createElement("DIV");
+    loading.id = "loading"
+    loading.style.display = "none";
+    $("qml-output").appendChild(loading);
+
+    // Begin loading Qt
+    var queryString = window.location.search.substring(1);
+    qt = new Qt({
+        src : "playground.nmf",
+        type : "application/x-pnacl",
+        query : queryString
+    });
+    var element = qt.createQtElement();
+
+    // Register event listeners
+    element.addEventListener('loadstart', onProgress, true);
+    element.addEventListener('progress', onProgress, true);
+    element.addEventListener('load', onProgress, true);
+    element.addEventListener('loadend', onProgress, true);
+    element.addEventListener('message', onMessage, true);
+    element.addEventListener('crash', onCrash, true);
+
+    // Add Qt to DOM
+    $("qml-output").appendChild(element);
+
+    // populate example-select combobox with local
+    // and server examples.
+    var examplesElement = $("example-select")
+    var serverExamples = {
+        hello : "Hello World",
+        shaders : "Shaders",
+        video : "Video",
+        gallery : "Gallery"
+    }
+    var localExamples = localListSources()
+    
+    var examples = {}
+    for (var key in serverExamples) { examples[key] = serverExamples[key] }
+    for (var i = 0; i < localExamples.length; i++) {
+        var name = localExamples[i].slice(0, -4) // remove .qml
+        examples[name] = name;
+    }
+
+    for (example in examples) {
+        var opt = document.createElement('option')
+        opt.value = example
+        opt.innerHTML = examples[example]
+        examplesElement.appendChild(opt)
+    }
+
+    // check for gist in query, start in either gist mode
+    // or example-select mode.
+    var gistId = decodeQuery(queryString)["gist"]
+    if (gistId !== undefined) {
+        loadGist(gistId, onGistLoaded)
+    } else {
+        $("example-select").onchange();
+    }
+}
+
+</script>
+
+<body id="TOPLEVEL" onload="init()">
+    <div id="HEADER">
+        <div id="TITLETEXT"> Qt Quick Playground </div>
+    </div>
+    <div id="TOOLBAR">
+        <select id="example-select" onchange="onExampleSelect(value)"></select>
+        <input id="name-label" type="text"></input>
+        <button id="save-button" type="button" onclick="onSaveSource()">Local Save</button>
+        <button id="reset-button" type="button" onclick="onResetSource()">Local Delete</button>
+        <button id="run-button" type="button" onclick="onRunSource()">Run</button>
+        <input id="autorun" type="checkbox" checked=true>Autorun</button>
+        <button id="gist-button" type="button" onclick="onCreateGist()">Gist</button>
+        <div id="gist-label"></div>
+    </div>
+    <div id="A">
+        <textarea id="qml-input" class="flex-child" oninput="onChangeSource()">  </textarea>
+        <div id="qml-output" class="flex-child">  </div>
+    </div>
+    <div id="B">
+        <textarea id="qml-status" class="flex-child" rows="5" cols="60" readonly=true>  </textarea>
+        <textarea id="qml-warnings" class="flex-child" rows="5" cols="60" readonly=true>  </textarea>
+    </div>
+</body>
+
+</html>
