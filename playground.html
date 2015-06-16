@@ -21,7 +21,14 @@ https://gist.github.com/anonymous/bdf6f39ae6dab5aecd74
 
 <head>
     <title>Qt Quick Playground</title>
+
+    <!-- Qt -->
     <script src="qtloader.js" type="text/javascript"></script>
+
+    <!-- CodeMirror editor -->
+    <script src="bower_components/codemirror/lib/codemirror.js"></script>
+    <link rel="stylesheet" href="bower_components/codemirror/lib/codemirror.css">
+    <script src="bower_components/codemirror/mode/javascript/javascript.js"></script>
 </head>
 
 <style>
@@ -43,6 +50,7 @@ a:link {
 .flex-child { flex: 1; margin: 5; display: flex; }
 .qt-nacl-container{ flex: 1; display: flex; }
 .qt-nacl-embed{ flex: 1; }
+.CodeMirror { flex: 1; margin: 5; display: flex; height : 60% }
 
 #HEADER { background-color : steelblue }
 #TITLETEXT { color: white; font-family: arial; font-weight: 100; font-size: 200%; letter-spacing: 2px;}
@@ -55,6 +63,8 @@ a:link {
 
 var debug = false;
 var qt = undefined;
+var useCodeMirror = true;
+var codeMirror = undefined;
 
 // Utility
 
@@ -172,6 +182,40 @@ function loadGist(id, callback) {
     get(gistUrl, evalJsonP)
 }
 
+// Code editor management. The code editor can be a plain text area or a
+// CodeMirror editor.
+
+function editorCreateCodeMirror(textArea) {
+    codeMirror = CodeMirror.fromTextArea(
+        textArea,
+        {
+            mode : {
+                name : "javascript"
+            },
+            theme : "javascript",
+            lineNumbers: true,
+            width : "dynamic",
+            height : "dynamic",
+        }
+    );
+    codeMirror.on('change', onChangeSource);
+    return codeMirror;
+}
+
+function editorSetSource(source) {
+    if (codeMirror === undefined)
+        $("qml-input").value = source
+    else
+        codeMirror.getDoc().setValue(source)
+}
+
+function editorGetSource() {
+    if (codeMirror === undefined)
+        return $("qml-input").value
+    else
+        return codeMirror.getDoc().getValue()
+}
+
 // Action callbacks and response logic
 
 function onProgress(event) {
@@ -237,7 +281,7 @@ function onCrash(event) {
 }
 
 function setSource(name, source) {
-    $("qml-input").value = source
+    editorSetSource(source)
     $("name-label").value = name
 
     // run code on source update
@@ -262,7 +306,7 @@ function onExampleSelect(name){
 function onSaveSource() {
     // Save the current example source to local storage
     var name = $("name-label").value
-    var source = $("qml-input").value
+    var source = editorGetSource()
     localSaveSource(name, source)
 }
 
@@ -275,6 +319,7 @@ function onResetSource() {
 }
 
 function onChangeSource() {
+    console.log("onChangeSource")
     // Tell Qt to update the source QML iff autorun is enabled
     var autorun = $("autorun").checked
     if (autorun)
@@ -286,7 +331,7 @@ function onRunSource() {
     $("qml-warnings").value = ""
 
     // Tell Qt to update the source QML
-    var source = $("qml-input").value
+    var source = editorGetSource();
     if (source === undefined || source == "")
         return
 
@@ -296,7 +341,7 @@ function onRunSource() {
 
 function onCreateGist() {
     var name = $("example-select").value
-    var source = $("qml-input").value
+    var source = editorGetSource();
     $("gist-label").innerHTML = "Working..."
     createGist(name + ".qml", source, onGistCreated)
 }
@@ -378,6 +423,11 @@ function init() {
         opt.innerHTML = examples[example]
         examplesElement.appendChild(opt)
     }
+
+    // Create CodeMirror editor if enabled
+    var textArea = $("qml-input")
+    if (useCodeMirror)
+        codeMirror = editorCreateCodeMirror(textArea)
 
     // check for gist in query, start in either gist mode
     // or example-select mode.
