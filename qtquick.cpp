@@ -52,7 +52,7 @@ public:
         LoadOk,
         LoadError
     };
- 
+
     QmlReloader()
     : baseUrl("/")
     , view(0)
@@ -64,13 +64,13 @@ public:
                          this, SIGNAL(qmlWarnings(const QList<QQmlError> &)));
         view->show();
     }
-    
+
     void loadSource(const QByteArray &source)
     {
         // Clear previous content
         delete component;
         view->engine()->clearComponentCache();
-        
+
         // Load new content
         component = new QQmlComponent(view->engine());
         QUrl baseUrl("/");
@@ -82,14 +82,14 @@ public:
              continueLoading();
          }
     }
-    
+
     QList<QQmlError> errors()
     {
         if (!component)
             return QList<QQmlError>();
         return component->errors();
     }
-    
+
 private Q_SLOTS:
     void continueLoading()
     {
@@ -104,7 +104,7 @@ private Q_SLOTS:
 Q_SIGNALS:
     void statusChanged(int status);
     void qmlWarnings(const QList<QQmlError> &);
-    
+
 private:
     QUrl baseUrl;
     QQuickView *view;
@@ -136,7 +136,7 @@ public:
         QObject::connect(reloader, SIGNAL(qmlWarnings(const QList<QQmlError>  &)),
                          this, SLOT(qmlWarnings(const QList<QQmlError> &)));
     }
-    
+
     void HandleMessage(const pp::Var &varMessage)
     {
         // Get message text
@@ -151,12 +151,12 @@ public:
                 reloader->loadSource(source);
             }
             return;
-        } 
-        
+        }
+
         // Forward other messages to Qt:
         QPepperInstance::HandleMessage(varMessage);
     }
-private Q_SLOTS:    
+private Q_SLOTS:
     void loadStatusChanged(int status) {
         // Send QML status message to the javascript host. Include error message.
         QByteArray statusMessage = "qmlstatus:"; // begin with message key
@@ -173,7 +173,7 @@ private Q_SLOTS:
 
         PostMessage(pp::Var(statusMessage.constData()));
     }
-    
+
     void qmlWarnings(const QList<QQmlError> & warnings) {
         // Send QML runtime warnings to the javascript host
         QByteArray warningsMessage = "qmlwarnings:";
@@ -181,7 +181,7 @@ private Q_SLOTS:
             warningsMessage.append(warnings.toString());
             warningsMessage.append("\n");
         }
-        
+
         PostMessage(pp::Var(warningsMessage.constData()));
     }
 private:
@@ -201,8 +201,8 @@ public:
     }
 };
 
-namespace pp { 
+namespace pp {
     pp::Module * CreateModule() { return new AppModule(); }
 }
 
-#include "main.moc"
+#include "qtquick.moc"
