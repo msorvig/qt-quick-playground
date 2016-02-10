@@ -24,12 +24,12 @@ https://gist.github.com/anonymous/bdf6f39ae6dab5aecd74
 
     <!-- Qt -->
     <script src="qtloader.js" type="text/javascript"></script>
-    <script src="qtquick.js" type="text/javascript"></script>
+    <script src="qtquickruntime.js" type="text/javascript"></script>
 
     <!-- CodeMirror editor -->
-    <script src="bower_components/codemirror/lib/codemirror.js"></script>
-    <link rel="stylesheet" href="bower_components/codemirror/lib/codemirror.css">
-    <script src="bower_components/codemirror/mode/javascript/javascript.js"></script>
+    <script src="codemirror/codemirror.js"></script>
+    <link rel="stylesheet" href="codemirror/codemirror.css">
+    <script src="codemirror/javascript.js"></script>
 </head>
 
 <style>
@@ -49,8 +49,7 @@ a:link {
 #A { flex: 10; display: flex; flex-direction: row; }
 #B { flex: 1; flex-basis: 50px; display: flex; flex-direction: row; }
 .flex-child { flex: 1; margin: 5; display: flex; }
-.qt-nacl-container { flex: 1; display: flex; }
-.qt-nacl-embed { flex: 1; }
+.qt-embed { flex: 1; }
 .qt-container { flex: 1; display: flex; }
 .CodeMirror { flex: 1; margin: 5; display: flex; height : 60% }
 
@@ -257,21 +256,6 @@ function onProgress(event) {
     }
 }
 
-function onMessage(message) {
-    // Present QML errors to the user
-    var qmlStatusKey = "qmlstatus:"
-    if (message.data.indexOf(qmlStatusKey) === 0) {
-        var content = message.data.slice(qmlStatusKey.length);
-        $("qml-status").value = "Parse Status " + content;
-    }
-
-    var qmlWarningsKey = "qmlwarnings:"
-    if (message.data.indexOf(qmlWarningsKey) === 0) {
-        var content = message.data.slice(qmlWarningsKey.length);
-        $("qml-warnings").value += content; // append warnings
-    }
-}
-
 function onCrash(event) {
     // Oops. inform the user and restart Qt.
     $("qml-status").value = "Qt crashed: restarting";
@@ -280,6 +264,18 @@ function onCrash(event) {
         output.removeChild(output.firstChild);
     }
     init();
+}
+
+function onQmlStatusChange(event)
+{
+    var content = event.detail;
+    $("qml-status").value = "Parse Status " + content;
+}
+
+function onQmlWarning(event)
+{
+    var content = event.detail;
+    $("qml-warnings").value += content + "\n"; // append warnings
 }
 
 function setSource(name, source) {
@@ -382,18 +378,19 @@ function init() {
 
     // Begin loading QtQuick
     var queryString = window.location.search.substring(1);
-    qtquick = new QtQuick({
+    qtquick = new QtQuickRuntime({
         query : queryString
     })
-    var element = qtquick.createQtElement();
+    var element = qtquick.createElement();
 
     // Register event listeners
     element.addEventListener('loadstart', onProgress, true);
     element.addEventListener('progress', onProgress, true);
     element.addEventListener('load', onProgress, true);
     element.addEventListener('loadend', onProgress, true);
-    element.addEventListener('message', onMessage, true);
     element.addEventListener('crash', onCrash, true);
+    element.addEventListener("qmlloadend", onQmlStatusChange, true);
+    element.addEventListener("qmlwarnings", onQmlWarning, true);
 
     // Add Qt to DOM
     $("qml-output").appendChild(element);
