@@ -219,41 +219,12 @@ function editorGetSource() {
 
 // Action callbacks and response logic
 
-function onProgress(event) {
+function onLoad(event) {
     if (debug)
-        console.log(event.type)
-
-    // Show progress indicator on load start
-    if (event.type == "loadstart") {
-       $("loading").style.display = "block"
-    }
-
-    // Update progress indicator on progress
-    if (event.type == "progress") {
-        if (debug)
-            console.log("progres " + event.loaded  + " " + event.total)
-        var progress = 100 * event.loaded / event.total;
-        var progressString = progress.toPrecision(2)
-        if (progress == 100)
-            progressString = 100;
-
-        if (event.total == 0)
-            $("loading").innerHTML = "Loading Qt Quick..."
-        else
-            $("loading").innerHTML = "Loading Qt Quick: " +  progressString + " %.";
-    }
-
-    // Re-trigger QML loading logic when Qt is ready
-    if (event.type == "load") {
         console.log("onload")
-        onRunSource()
-    }
 
-    // Hide progress indicator on load end
-    if (event.type == "loadend") {
-        console.log("loadend")
-        $("loading").style.display = "none";
-    }
+    // Trigger QML loading logic when Qt is ready
+    onRunSource()
 }
 
 function onCrash(event) {
@@ -317,7 +288,9 @@ function onResetSource() {
 }
 
 function onChangeSource() {
-    console.log("onChangeSource")
+    if (debug)
+        console.log("onChangeSource")
+
     // Tell Qt to update the source QML iff autorun is enabled
     var autorun = $("autorun").checked
     if (autorun)
@@ -333,7 +306,7 @@ function onRunSource() {
     if (source === undefined || source == "")
         return
 
-    qtquick.setSource(source)
+    qtquick.setData(source)
 }
 
 function onCreateGist() {
@@ -369,25 +342,16 @@ function init() {
     if (debug)
         console.log("init")
 
-    // Add Qt load progress indicator. Will be made visible
-    // by the progress handler.
-    var loading = document.createElement("DIV");
-    loading.id = "loading"
-    loading.style.display = "none";
-    $("qml-output").appendChild(loading);
-
     // Begin loading QtQuick
     var queryString = window.location.search.substring(1);
     qtquick = new QtQuickRuntime({
         query : queryString
     })
     var element = qtquick.createElement();
+    qtquick.load();
 
     // Register event listeners
-    element.addEventListener('loadstart', onProgress, true);
-    element.addEventListener('progress', onProgress, true);
-    element.addEventListener('load', onProgress, true);
-    element.addEventListener('loadend', onProgress, true);
+    element.addEventListener('load', onLoad, true);
     element.addEventListener('crash', onCrash, true);
     element.addEventListener("qmlloadend", onQmlStatusChange, true);
     element.addEventListener("qmlwarnings", onQmlWarning, true);
